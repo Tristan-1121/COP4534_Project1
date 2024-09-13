@@ -1,25 +1,65 @@
+// program/main.cpp
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include "password-manager.h"
 #include "hash-table.h"
-#include <iostream>
+#include "cipher.h"
 
 int main() {
-    PasswordManager pm;
-    HashTable ht;
+    PasswordManager passwordManager;
 
-    // Step 1: Parse names from file
-    std::vector<std::string> userIDs = pm.parseNames("names.txt");
+    // Generate raw data and encrypted data
+    passwordManager.generateRawData("rawdata.txt");
+    std::string encryptionKey = "jones"; // Replace with your key
+    passwordManager.generateEncryptedData("encrypteddata.txt", encryptionKey);
 
-    // Step 2: Write raw data with random passwords
-    pm.writeRawData(userIDs, "rawdata.txt");
+    // Create and populate hash table
+    HashTable hashTable;
+    hashTable.loadEncryptedData("encrypteddata.txt");
 
-    // Step 3: Load encrypted data into hash table
-    ht.loadEncryptedData("encrypteddata.txt");
+    // Test cases
+    std::ifstream infile("rawdata.txt");
+    if (!infile.is_open()) {
+        std::cerr << "Error opening file for reading: rawdata.txt" << std::endl;
+        return 1;
+    }
 
-    // Step 4: Load passwords from rawdata.txt
-    std::vector<std::string> passwords = pm.loadPasswords("rawdata.txt");
+    std::string line;
+    int count = 0;
+    while (std::getline(infile, line) && count < 9) {
+        std::istringstream ss(line);
+        std::string userId, password;
+        ss >> userId >> password;
 
-    // Step 5: Test legal and illegal password combinations
-    pm.testCombinations(userIDs, passwords, ht);
+        // Test 5 correct attempts (first, third, fifth, seventh, and ninth)
+        if (count % 2 == 0) {
+            std::string encryptedPassword = Cipher::encrypt(password, encryptionKey);
+            bool match = hashTable.verifyPassword(userId, encryptedPassword);
+            std::cout << "Legal:" << std::endl;
+            std::cout << "Userid: " << userId
+                      << " Password(file): " << password
+                      << " Password(table/un): " << encryptedPassword
+                      << " Result: " << (match ? "match" : "no match") << std::endl;
+        }
+        // Test 5 incorrect attempts (same user IDs with modified passwords)
+        else {
+            std::string wrongPassword = password;
+            wrongPassword[0] = (wrongPassword[0] == 'a') ? 'b' : 'a'; // Simple modification
+            std::string encryptedWrongPassword = Cipher::encrypt(wrongPassword, encryptionKey);
+            bool match = !hashTable.verifyPassword(userId, encryptedWrongPassword);
+            std::cout << "Illegal:" << std::endl;
+            std::cout << "Userid: " << userId
+                      << " Password(mod): " << wrongPassword
+                      << " Password(table/un): " << encryptedWrongPassword
+                      << " Result: " << (match ? "no match" : "match") << std::endl;
+        }
 
+        count++;
+    }
+
+    infile.close();
     return 0;
 }
+
